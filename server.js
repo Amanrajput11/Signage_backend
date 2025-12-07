@@ -8,7 +8,21 @@ const mediaRoutes = require('./routes/mediaRoutes');
 const playlistRoutes = require('./routes/playlistRoutes');
 
 const app = express();
-app.use(cors());
+app.use(
+  cors({
+    origin: "*",
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
+
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Headers", "Authorization, Content-Type");
+  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE");
+  next();
+});
+
 app.use(express.json()); // for json bodies
 app.use(express.urlencoded({ extended: true }));
 
