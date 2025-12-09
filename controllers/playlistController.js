@@ -1,12 +1,12 @@
 const Playlist = require('../models/Playlist');
 const Media = require('../models/Media');
 
-exports.createPlaylist = async (req, res) => {
+module.exports = { 
+createPlaylist : async (req, res) => {
   try {
     const { title, description, media = [] } = req.body;
     if (!title) return res.status(400).json({ message: 'Title required' });
 
-    // verify media ownership
     for (const m of media) {
       const doc = await Media.findById(m);
       if (!doc || doc.owner.toString() !== req.user._id.toString()) {
@@ -26,9 +26,9 @@ exports.createPlaylist = async (req, res) => {
     console.error(err);
     res.status(500).json({ message: 'Server error' });
   }
-};
+},
 
-exports.getPlaylists = async (req, res) => {
+getPlaylists : async (req, res) => {
   try {
     const playlists = await Playlist.find({ owner: req.user._id }).populate('media').sort({ createdAt: -1 });
     res.json(playlists);
@@ -36,9 +36,9 @@ exports.getPlaylists = async (req, res) => {
     console.error(err);
     res.status(500).json({ message: 'Server error' });
   }
-};
+},
 
-exports.getPlaylist = async (req, res) => {
+getPlaylist : async (req, res) => {
   try {
     const p = await Playlist.findById(req.params.id).populate('media');
     if (!p) return res.status(404).json({ message: 'Not found' });
@@ -48,9 +48,9 @@ exports.getPlaylist = async (req, res) => {
     console.error(err);
     res.status(500).json({ message: 'Server error' });
   }
-};
+},
 
-exports.updatePlaylist = async (req, res) => {
+updatePlaylist : async (req, res) => {
   try {
     const p = await Playlist.findById(req.params.id);
     if (!p) return res.status(404).json({ message: 'Not found' });
@@ -75,9 +75,9 @@ exports.updatePlaylist = async (req, res) => {
     console.error(err);
     res.status(500).json({ message: 'Server error' });
   }
-};
+},
 
-exports.deletePlaylist = async (req, res) => {
+deletePlaylist : async (req, res) => {
   try {
     const p = await Playlist.findById(req.params.id);
     if (!p) return res.status(404).json({ message: 'Not found' });
@@ -88,4 +88,6 @@ exports.deletePlaylist = async (req, res) => {
     console.error(err);
     res.status(500).json({ message: 'Server error' });
   }
+},
+
 };
