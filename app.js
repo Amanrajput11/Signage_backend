@@ -7,6 +7,7 @@ const http = require("http");
 const { Server } = require("socket.io");
 const debug = require("debug")(process.env.DEBUG + "server");
 const mediaRoutes = require("./routes/mediaRoute");
+const userRoutes = require("./routes/userRoutes");
 const path = require("path");
 require("./Helpers/cron"); 
 
@@ -97,6 +98,8 @@ app.use(express.urlencoded({ extended: true }));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 // Routes
 app.use("/api/media", mediaRoutes);
+app.use("/api/user", userRoutes);
+
 
 // Health check route
 app.get("/", (req, res) => {
