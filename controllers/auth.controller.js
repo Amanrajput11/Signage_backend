@@ -90,5 +90,57 @@ login: async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
-}
+},
+  getProfile: async (req, res) => {
+    try {
+      // req.user is already fetched in verifyAccessToken
+      if (!req.user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      const user = req.user.toObject();
+      delete user.password;
+
+      res.status(200).json({
+        success: true,
+        data: user,
+      });
+    } catch (error) {
+      res.status(500).json({ message: error.message });
+    }
+  },
+
+  // ================= UPDATE PASSWORD =================
+  updatePassword: async (req, res) => {
+    try {
+      const { oldPassword, newPassword } = req.body;
+
+      if (!oldPassword || !newPassword) {
+        return res.status(400).json({
+          message: "Old password and new password are required",
+        });
+      }
+
+      const user = req.user;
+
+      // Check old password
+      const isMatch = await user.isValidPassword(oldPassword);
+      if (!isMatch) {
+        return res.status(401).json({
+          message: "Old password is incorrect",
+        });
+      }
+
+      // Update password (bcrypt runs automatically)
+      user.password = newPassword;
+      await user.save();
+
+      res.status(200).json({
+        success: true,
+        message: "Password updated successfully",
+      });
+    } catch (error) {
+      res.status(500).json({ message: error.message });
+    }
+  },
 }

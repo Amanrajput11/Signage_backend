@@ -69,9 +69,6 @@ getAllMedia: async (req, res) => {
   }
 },
 
-
-
-
   // ================= CREATE PLAYLIST =================
 createPlaylist: async (req, res) => {
   try {
