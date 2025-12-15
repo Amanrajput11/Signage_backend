@@ -7,12 +7,10 @@ const playlistItemSchema = new mongoose.Schema(
       ref: "Media",
       required: true,
     },
-
     mediaItemId: {
       type: mongoose.Schema.Types.ObjectId,
-      required: true, // _id of image/video inside Media
+      required: true,
     },
-
     type: {
       type: String,
       enum: ["image", "video"],
@@ -36,6 +34,14 @@ const playlistSchema = new mongoose.Schema(
     },
 
     mediaItems: [playlistItemSchema],
+
+    // 🔐 OWNER
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      index: true,
+    },
   },
   { timestamps: true }
 );

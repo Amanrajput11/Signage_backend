@@ -5,23 +5,24 @@ module.exports = {
   
 uploadMedia: async (req, res) => {
   try {
+    if (!req.user || !req.user._id) {
+      return res.status(401).json({
+        success: false,
+        error: "User not authenticated",
+      });
+    }
+
     const { title, description } = req.body;
+    const userId = req.user._id; // ✅ THIS IS THE FIX
 
     const mediaFiles = [];
 
     if (req.files && req.files.length > 0) {
       req.files.forEach((file) => {
-        if (file.mimetype.startsWith("image")) {
-          mediaFiles.push({
-            path: file.path,
-            type: "image",
-          });
-        } else if (file.mimetype.startsWith("video")) {
-          mediaFiles.push({
-            path: file.path,
-            type: "video",
-          });
-        }
+        mediaFiles.push({
+          path: file.path,
+          type: file.mimetype.startsWith("image") ? "image" : "video",
+        });
       });
     }
 
@@ -29,6 +30,7 @@ uploadMedia: async (req, res) => {
       title,
       description,
       media: mediaFiles,
+      uploadedBy: userId, // 🔥 REQUIRED FIELD
     });
 
     await media.save();
@@ -39,50 +41,59 @@ uploadMedia: async (req, res) => {
       data: media,
     });
   } catch (err) {
-    console.error(err);
+    console.error("UPLOAD MEDIA ERROR 👉", err);
     res.status(500).json({
       success: false,
-      error: "Media upload failed",
+      error: err.message,
     });
   }
 },
 
+
+
 getAllMedia: async (req, res) => {
   try {
-    const mediaList = await Media.find()
-      .sort({ createdAt: -1 })
-      .lean();
+    const userId = req.user._id; // ✅ FIXED
 
-    res.status(200).json({
+    const mediaList = await Media.find({ uploadedBy: userId })
+      .sort({ createdAt: -1 });
+
+    res.json({
       success: true,
       count: mediaList.length,
       data: mediaList,
     });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({
-      success: false,
-      error: "Failed to fetch media",
-    });
+    console.error("GET MEDIA ERROR 👉", err);
+    res.status(500).json({ error: "Failed to fetch media" });
   }
 },
+
+
 
 
   // ================= CREATE PLAYLIST =================
 createPlaylist: async (req, res) => {
   try {
     const { name, description, mediaItems } = req.body;
+    const userId = req.user._id;
 
     if (!name) {
       return res.status(400).json({ error: "Playlist name is required" });
     }
 
-    // Validate media items
+    // 🔐 Validate media ownership
     if (mediaItems?.length) {
       for (const item of mediaItems) {
-        const media = await Media.findById(item.mediaId);
+        const media = await Media.findOne({
+          _id: item.mediaId,
+          uploadedBy: userId, // 🔥 critical
+        });
+
         if (!media) {
-          return res.status(400).json({ error: "Invalid mediaId" });
+          return res
+            .status(403)
+            .json({ error: "Unauthorized media access" });
         }
 
         const exists = media.media.some(
@@ -90,9 +101,7 @@ createPlaylist: async (req, res) => {
         );
 
         if (!exists) {
-          return res
-            .status(400)
-            .json({ error: "Invalid mediaItemId" });
+          return res.status(400).json({ error: "Invalid mediaItemId" });
         }
       }
     }
@@ -101,48 +110,65 @@ createPlaylist: async (req, res) => {
       name,
       description,
       mediaItems: mediaItems || [],
+      createdBy: userId,
     });
 
     await playlist.save();
 
     res.status(201).json({
       success: true,
-      message: "Playlist created successfully",
       data: playlist,
     });
   } catch (err) {
-    console.error(err);
     res.status(500).json({ error: "Failed to create playlist" });
   }
 },
 
 
+
   // ================= ADD MEDIA TO PLAYLIST =================
-  addMediaToPlaylist: async (req, res) => {
+addMediaToPlaylist: async (req, res) => {
   try {
     const { playlistId } = req.params;
     const { mediaId, mediaItemId, type } = req.body;
+    const userId = req.user._id;
 
-    const playlist = await Playlist.findById(playlistId);
+    if (!mediaId || !mediaItemId || !type) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    // 🔐 Playlist owner check
+    const playlist = await Playlist.findOne({
+      _id: playlistId,
+      createdBy: userId,
+    });
+
     if (!playlist) {
       return res.status(404).json({ error: "Playlist not found" });
     }
 
-    const media = await Media.findById(mediaId);
+    // 🔐 Media owner check
+    const media = await Media.findOne({
+      _id: mediaId,
+      uploadedBy: userId,
+    });
+
     if (!media) {
-      return res.status(400).json({ error: "Invalid mediaId" });
+      return res.status(403).json({ error: "Unauthorized media" });
     }
 
+    // ✅ Validate mediaItem exists
     const exists = media.media.some(
-      (m) => m._id.toString() === mediaItemId
+      (m) => m._id.toString() === mediaItemId.toString()
     );
 
     if (!exists) {
       return res.status(400).json({ error: "Invalid mediaItemId" });
     }
 
+    // 🚫 Prevent duplicate add
     const alreadyAdded = playlist.mediaItems.some(
-      (i) => i.mediaItemId.toString() === mediaItemId
+      (i) => i.mediaItemId.toString() === mediaItemId.toString()
     );
 
     if (!alreadyAdded) {
@@ -152,13 +178,17 @@ createPlaylist: async (req, res) => {
 
     res.json({
       success: true,
-      message: "Media item added to playlist",
+      message: alreadyAdded
+        ? "Media already exists in playlist"
+        : "Media added to playlist",
       data: playlist,
     });
   } catch (err) {
-    res.status(500).json({ error: "Failed to add media to playlist" });
+    console.error("ADD MEDIA TO PLAYLIST ERROR 👉", err);
+    res.status(500).json({ error: "Failed to add media" });
   }
 },
+
 
 
   // ================= GET PLAYLIST WITH MEDIA =================
@@ -203,36 +233,21 @@ createPlaylist: async (req, res) => {
   // ================= GET ALL PLAYLISTS =================
   getAllPlaylists: async (req, res) => {
   try {
-    const playlists = await Playlist.find()
+    const userId = req.user._id;
+
+    const playlists = await Playlist.find({ createdBy: userId })
       .sort({ createdAt: -1 })
       .populate("mediaItems.mediaId");
 
-    const result = playlists.map((playlist) => ({
-      _id: playlist._id,
-      name: playlist.name,
-      description: playlist.description,
-      createdAt: playlist.createdAt,
-      mediaItems: playlist.mediaItems.map((item) => {
-        const mediaFile = item.mediaId.media.find(
-          (m) => m._id.toString() === item.mediaItemId.toString()
-        );
-
-        return {
-          _id: item._id,
-          type: item.type,
-          path: mediaFile?.path,
-        };
-      }),
-    }));
-
     res.json({
       success: true,
-      count: result.length,
-      data: result,
+      count: playlists.length,
+      data: playlists,
     });
-  } catch (err) {
+  } catch {
     res.status(500).json({ error: "Failed to fetch playlists" });
   }
 },
+
 
 };

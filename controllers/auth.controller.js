@@ -1,5 +1,9 @@
 const User = require("../models/user.model");
 const jwt = require("jsonwebtoken");
+const {
+  signAccessToken,
+  signRefreshToken,
+} = require("../Helpers/jwt_helper");
 
 module.exports = {
     create : async (req, res) => {
@@ -43,7 +47,7 @@ module.exports = {
   }
 },
 
-login : async (req, res) => {
+login: async (req, res) => {
   try {
     const { email, password } = req.body;
 
@@ -67,25 +71,21 @@ login : async (req, res) => {
       return res.status(401).json({ message: "Invalid email or password" });
     }
 
-    const token = jwt.sign(
-      {
-        userId: user._id,
-        role: user.role
-      },
-      process.env.JWT_SECRET || "jwt_secret_key",
-      { expiresIn: "1d" }
-    );
+    // ✅ USE JWT HELPER (IMPORTANT)
+    const accessToken = await signAccessToken(user._id);
+    const refreshToken = await signRefreshToken(user._id);
 
     res.status(200).json({
       message: "Login successful",
-      token,
+      accessToken,
+      refreshToken,
       user: {
         id: user._id,
         fullName: user.fullName,
         email: user.email,
         role: user.role,
-        is_inactive: user.is_inactive
-      }
+        is_inactive: user.is_inactive,
+      },
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
