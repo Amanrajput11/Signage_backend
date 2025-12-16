@@ -340,5 +340,73 @@ deletePlaylist: async (req, res) => {
   }
 },
 
+// ================= DELETE MEDIA ITEM =================
+deleteMediaItem: async (req, res) => {
+  try {
+    const { mediaId, mediaItemId } = req.params;
+    const userId = req.user._id;
+
+    // 🔐 Media ownership check
+    const media = await Media.findOne({
+      _id: mediaId,
+      uploadedBy: userId,
+    });
+
+    if (!media) {
+      return res.status(404).json({
+        success: false,
+        error: "Media not found or unauthorized",
+      });
+    }
+
+    // ✅ Check media item exists
+    const itemExists = media.media.some(
+      (m) => m._id.toString() === mediaItemId
+    );
+
+    if (!itemExists) {
+      return res.status(404).json({
+        success: false,
+        error: "Media item not found",
+      });
+    }
+
+    // 🗑️ Remove media item from Media document
+    media.media = media.media.filter(
+      (m) => m._id.toString() !== mediaItemId
+    );
+
+    await media.save();
+
+    // 🧹 Remove media item from all playlists
+    await Playlist.updateMany(
+      {},
+      {
+        $pull: {
+          mediaItems: {
+            mediaId: mediaId,
+            mediaItemId: mediaItemId,
+          },
+        },
+      }
+    );
+
+    // ⚠️ Optional: delete media doc if empty
+    if (media.media.length === 0) {
+      await Media.findByIdAndDelete(mediaId);
+    }
+
+    res.json({
+      success: true,
+      message: "Media item deleted successfully",
+    });
+  } catch (err) {
+    console.error("DELETE MEDIA ITEM ERROR 👉", err);
+    res.status(500).json({
+      success: false,
+      error: "Failed to delete media item",
+    });
+  }
+},
 
 };

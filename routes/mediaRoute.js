@@ -20,6 +20,12 @@ router.get(
   controller.getAllMedia
 );
 
+router.delete(
+  "/:mediaId/item/:mediaItemId",
+  verifyAccessToken,
+  controller.deleteMediaItem
+);
+
 /* ================= PLAYLIST ================= */
 
 // Create playlist (user-specific)
