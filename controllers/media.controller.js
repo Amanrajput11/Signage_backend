@@ -207,6 +207,7 @@ addMediaToPlaylist: async (req, res) => {
       return {
         _id: item._id,
         type: item.type,
+        mediaId: mediaDoc._id, 
         path: mediaFile?.path,
         mediaItemId: item.mediaItemId,
       };
@@ -243,6 +244,99 @@ addMediaToPlaylist: async (req, res) => {
     });
   } catch {
     res.status(500).json({ error: "Failed to fetch playlists" });
+  }
+},
+// ================= UPDATE PLAYLIST (ADD / REMOVE / REPLACE MEDIA) =================
+updatePlaylist: async (req, res) => {
+  try {
+    const { playlistId } = req.params;
+    const { name, description, mediaItems } = req.body;
+    const userId = req.user._id;
+
+    // 🔐 Playlist ownership check
+    const playlist = await Playlist.findOne({
+      _id: playlistId,
+      createdBy: userId,
+    });
+
+    if (!playlist) {
+      return res.status(404).json({ error: "Playlist not found" });
+    }
+
+    // ✏️ Update metadata
+    if (name !== undefined) playlist.name = name;
+    if (description !== undefined) playlist.description = description;
+
+    // 🔁 Replace media items completely (ADD / DELETE / REORDER)
+    if (Array.isArray(mediaItems)) {
+      for (const item of mediaItems) {
+        const { mediaId, mediaItemId, type } = item;
+
+        if (!mediaId || !mediaItemId || !type) {
+          return res.status(400).json({ error: "Invalid media item data" });
+        }
+
+        // 🔐 Media ownership check
+        const media = await Media.findOne({
+          _id: mediaId,
+          uploadedBy: userId,
+        });
+
+        if (!media) {
+          return res
+            .status(403)
+            .json({ error: "Unauthorized media access" });
+        }
+
+        // ✅ Validate mediaItemId exists
+        const exists = media.media.some(
+          (m) => m._id.toString() === mediaItemId.toString()
+        );
+
+        if (!exists) {
+          return res.status(400).json({ error: "Invalid mediaItemId" });
+        }
+      }
+
+      // 🔥 Replace old playlist media with new array
+      playlist.mediaItems = mediaItems;
+    }
+
+    await playlist.save();
+
+    res.json({
+      success: true,
+      message: "Playlist updated successfully",
+      data: playlist,
+    });
+  } catch (err) {
+    console.error("UPDATE PLAYLIST ERROR 👉", err);
+    res.status(500).json({ error: "Failed to update playlist" });
+  }
+},
+
+// ================= DELETE PLAYLIST =================
+deletePlaylist: async (req, res) => {
+  try {
+    const { playlistId } = req.params;
+    const userId = req.user._id;
+
+    const playlist = await Playlist.findOneAndDelete({
+      _id: playlistId,
+      createdBy: userId,
+    });
+
+    if (!playlist) {
+      return res.status(404).json({ error: "Playlist not found" });
+    }
+
+    res.json({
+      success: true,
+      message: "Playlist deleted successfully",
+    });
+  } catch (err) {
+    console.error("DELETE PLAYLIST ERROR 👉", err);
+    res.status(500).json({ error: "Failed to delete playlist" });
   }
 },
 

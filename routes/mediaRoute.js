@@ -50,4 +50,8 @@ router.get(
   controller.getAllPlaylists
 );
 
+router.put("/playlist/:playlistId", verifyAccessToken, controller.updatePlaylist);
+router.delete("/playlist/:playlistId", verifyAccessToken, controller.deletePlaylist);
+
+
 module.exports = router;

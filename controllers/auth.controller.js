@@ -63,7 +63,9 @@ login: async (req, res) => {
     }
 
     if (user.is_inactive) {
-      return res.status(403).json({ message: "Account is inactive" });
+      return res.status(403).json({
+        message: "Your account is inactive. Please contact admin.",
+      });
     }
 
     const isMatch = await user.isValidPassword(password);
@@ -91,6 +93,50 @@ login: async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 },
+
+// ================= GET ALL USERS =================
+getAllUsers: async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const search = req.query.search || "";
+
+    const skip = (page - 1) * limit;
+
+    // 🔍 Search filter
+    const filter = search
+      ? {
+          $or: [
+            { fullName: { $regex: search, $options: "i" } },
+            { email: { $regex: search, $options: "i" } },
+            { mobile: { $regex: search, $options: "i" } },
+          ],
+        }
+      : {};
+
+    const users = await User.find(filter)
+      .select("-password")
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    const total = await User.countDocuments(filter);
+
+    res.status(200).json({
+      success: true,
+      page,
+      total,
+      totalPages: Math.ceil(total / limit),
+      data: users,
+    });
+  } catch (error) {
+    console.error("GET USERS ERROR 👉", error);
+    res.status(500).json({
+      message: "Failed to fetch users",
+    });
+  }
+},
+
   getProfile: async (req, res) => {
     try {
       // req.user is already fetched in verifyAccessToken
@@ -143,4 +189,45 @@ login: async (req, res) => {
       res.status(500).json({ message: error.message });
     }
   },
+
+
+  // ================= ACTIVATE / INACTIVATE USER =================
+updateUserStatus: async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { is_inactive } = req.body;
+
+    // Validation
+    if (typeof is_inactive !== "boolean") {
+      return res.status(400).json({
+        message: "is_inactive must be true or false",
+      });
+    }
+
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { is_inactive },
+      { new: true }
+    ).select("-password");
+
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: is_inactive
+        ? "User inactivated successfully"
+        : "User activated successfully",
+      data: user,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: error.message,
+    });
+  }
+},
+
 }
