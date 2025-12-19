@@ -33,6 +33,14 @@ const playlistSchema = new mongoose.Schema(
       trim: true,
     },
 
+    // 🖥️ SCREEN ORIENTATION
+    orientation: {
+      type: String,
+      enum: ["vertical", "horizontal"],
+      default: "horizontal",
+      required: true,
+    },
+
     mediaItems: [playlistItemSchema],
 
     // 🔐 OWNER

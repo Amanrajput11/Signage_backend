@@ -72,11 +72,17 @@ getAllMedia: async (req, res) => {
   // ================= CREATE PLAYLIST =================
 createPlaylist: async (req, res) => {
   try {
-    const { name, description, mediaItems } = req.body;
+    const { name, description, mediaItems, orientation } = req.body;
     const userId = req.user._id;
 
     if (!name) {
       return res.status(400).json({ error: "Playlist name is required" });
+    }
+
+    // ✅ Validate orientation
+    const allowedOrientations = ["vertical", "horizontal"];
+    if (orientation && !allowedOrientations.includes(orientation)) {
+      return res.status(400).json({ error: "Invalid orientation" });
     }
 
     // 🔐 Validate media ownership
@@ -84,7 +90,7 @@ createPlaylist: async (req, res) => {
       for (const item of mediaItems) {
         const media = await Media.findOne({
           _id: item.mediaId,
-          uploadedBy: userId, // 🔥 critical
+          uploadedBy: userId,
         });
 
         if (!media) {
@@ -106,6 +112,7 @@ createPlaylist: async (req, res) => {
     const playlist = new Playlist({
       name,
       description,
+      orientation: orientation || "horizontal",
       mediaItems: mediaItems || [],
       createdBy: userId,
     });
@@ -120,6 +127,7 @@ createPlaylist: async (req, res) => {
     res.status(500).json({ error: "Failed to create playlist" });
   }
 },
+
 
 
 
