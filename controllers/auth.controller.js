@@ -1,4 +1,5 @@
 const User = require("../models/user.model");
+const TvPairing = require("../models/TvPairing.model");
 const jwt = require("jsonwebtoken");
 const {
   signAccessToken,
@@ -227,6 +228,91 @@ updateUserStatus: async (req, res) => {
     res.status(500).json({
       message: error.message,
     });
+  }
+},
+
+/* ================= TV: GENERATE CODE ================= */
+generateTvCode: async (req, res) => {
+  try {
+    const { deviceId } = req.body;
+
+    if (!deviceId) {
+      return res.status(400).json({ message: "Device ID required" });
+    }
+
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+
+    await TvPairing.create({
+      code,
+      deviceId,
+      expiresAt: new Date(Date.now() + 5 * 60 * 1000), // 5 min
+    });
+
+    res.status(200).json({
+      success: true,
+      code,
+      expiresIn: 300,
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+},
+
+/* ================= TV: PAIR DEVICE ================= */
+pairTv: async (req, res) => {
+  try {
+    const { code } = req.body;
+    const userId = req.user._id;
+
+    const pairing = await TvPairing.findOne({
+      code,
+      isUsed: false,
+      expiresAt: { $gt: new Date() },
+    });
+
+    if (!pairing) {
+      return res.status(400).json({
+        message: "Invalid or expired TV code",
+      });
+    }
+
+    pairing.isUsed = true;
+    pairing.userId = userId;
+    await pairing.save();
+
+    res.status(200).json({
+      success: true,
+      message: "TV paired successfully",
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+},
+
+/* ================= TV: CHECK STATUS ================= */
+checkTvStatus: async (req, res) => {
+  try {
+    const { code } = req.params;
+
+    const pairing = await TvPairing.findOne({ code });
+
+    if (!pairing || !pairing.isUsed) {
+      return res.status(200).json({ paired: false });
+    }
+
+    const accessToken = await signAccessToken(pairing.userId);
+    const refreshToken = await signRefreshToken(pairing.userId);
+
+    // Optional cleanup
+    await TvPairing.deleteOne({ _id: pairing._id });
+
+    res.status(200).json({
+      paired: true,
+      accessToken,
+      refreshToken,
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
 },
 
