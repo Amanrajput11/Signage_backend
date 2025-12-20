@@ -22,18 +22,9 @@ const playlistItemSchema = new mongoose.Schema(
 
 const playlistSchema = new mongoose.Schema(
   {
-    name: {
-      type: String,
-      required: true,
-      trim: true,
-    },
+    name: { type: String, required: true, trim: true },
+    description: { type: String, trim: true },
 
-    description: {
-      type: String,
-      trim: true,
-    },
-
-    // 🖥️ SCREEN ORIENTATION
     orientation: {
       type: String,
       enum: ["vertical", "horizontal"],
@@ -43,7 +34,13 @@ const playlistSchema = new mongoose.Schema(
 
     mediaItems: [playlistItemSchema],
 
-    // 🔐 OWNER
+    // 🔥 ACTIVE FLAG
+    isActive: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",

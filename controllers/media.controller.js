@@ -416,5 +416,64 @@ deleteMediaItem: async (req, res) => {
     });
   }
 },
+activatePlaylist: async (req, res) => {
+  try {
+    const { playlistId } = req.params;
+    const userId = req.user._id;
 
+    // 🔐 Check ownership
+    const playlist = await Playlist.findOne({
+      _id: playlistId,
+      createdBy: userId,
+    });
+
+    if (!playlist) {
+      return res.status(404).json({ error: "Playlist not found" });
+    }
+
+    // 🔄 Deactivate all playlists of this user
+    await Playlist.updateMany(
+      { createdBy: userId },
+      { $set: { isActive: false } }
+    );
+
+    // ✅ Activate selected playlist
+    playlist.isActive = true;
+    await playlist.save();
+
+    res.json({
+      success: true,
+      message: "Playlist activated successfully",
+      data: playlist,
+    });
+  } catch (err) {
+    console.error("ACTIVATE PLAYLIST ERROR 👉", err);
+    res.status(500).json({ error: "Failed to activate playlist" });
+  }
+},
+// ================= DEACTIVATE PLAYLIST =================
+deactivatePlaylist: async (req, res) => {
+  try {
+    const { playlistId } = req.params;
+    const userId = req.user._id;
+
+    const playlist = await Playlist.findOneAndUpdate(
+      { _id: playlistId, createdBy: userId },
+      { isActive: false },
+      { new: true }
+    );
+
+    if (!playlist) {
+      return res.status(404).json({ error: "Playlist not found" });
+    }
+
+    res.json({
+      success: true,
+      message: "Playlist deactivated",
+      data: playlist,
+    });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to deactivate playlist" });
+  }
+},
 };
