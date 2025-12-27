@@ -1,36 +1,35 @@
-const mongoose = require('mongoose')
-const debug = require('debug')(process.env.DEBUG+'mongodb');
+const mongoose = require("mongoose");
+const debug = require("debug")(process.env.DEBUG + "mongodb");
 
-mongoose.set('strictQuery', true);
-
-const fs = require('fs');
+mongoose.set("strictQuery", true);
 
 mongoose
   .connect(process.env.MONGODB_URI, {
     dbName: process.env.DB_NAME,
-    useNewUrlParser: true,
-      useUnifiedTopology: true,
-
   })
   .then(() => {
-    debug('mongodb connected.')
+    debug("MongoDB connected.");
   })
-  .catch((err) => console.log(err.message))
-console.log("Connecting to MongoDB URI:", process.env.MONGODB_URI); // or MONGO_URI
+  .catch((err) => {
+    console.error("MongoDB connection error:", err.message);
+  });
 
-mongoose.connection.on('connected', () => {
-    debug(`Mongoose connecting to ${process.env.DB_NAME}`)
-})
+console.log("Connecting to MongoDB URI:", process.env.MONGODB_URI);
 
-mongoose.connection.on('error', (err) => {
-    debug(err.message)
-})
+mongoose.connection.on("connected", () => {
+  debug(`Mongoose connected to DB: ${process.env.DB_NAME}`);
+});
 
-mongoose.connection.on('disconnected', () => {
-    debug('Mongoose connection is disconnected.')
-})
+mongoose.connection.on("error", (err) => {
+  debug("Mongoose error:", err.message);
+});
 
-process.on('SIGINT', async () => {
-  await mongoose.connection.close()
-  process.exit(0)
-})
+mongoose.connection.on("disconnected", () => {
+  debug("Mongoose disconnected.");
+});
+
+process.on("SIGINT", async () => {
+  await mongoose.connection.close();
+  debug("Mongoose connection closed due to app termination.");
+  process.exit(0);
+});

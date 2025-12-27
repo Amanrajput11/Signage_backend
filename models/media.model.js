@@ -10,6 +10,11 @@ const MediaSchema = new mongoose.Schema(
     title: String,
     description: String,
     media: [MediaItemSchema],
+    orientation: {
+      type: String,
+      enum: ["vertical", "horizontal"],
+      default: "horizontal",
+    },
 
     // 🔐 OWNER
     uploadedBy: {
