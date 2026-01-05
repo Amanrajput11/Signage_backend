@@ -149,34 +149,29 @@ module.exports = {
   },
 
   // ================= UPDATE PASSWORD =================
-  updatePassword: async (req, res, next) => {
+
+  updatePassword: async (req, res) => {
     try {
       const { oldPassword, newPassword } = req.body;
-
       if (!oldPassword || !newPassword) {
-        return res.status(400).json({
-          message: "Old password and new password are required",
-        });
+        return res
+          .status(400)
+          .json({ message: "Old password and new password are required" });
       }
-
       const user = req.user;
-
+      // Check old password
       const isMatch = await user.isValidPassword(oldPassword);
       if (!isMatch) {
-        return res.status(401).json({
-          message: "Old password is incorrect",
-        });
+        return res.status(401).json({ message: "Old password is incorrect" });
       }
-
+      // Update password (bcrypt runs automatically)
       user.password = newPassword;
       await user.save();
-
-      res.status(200).json({
-        success: true,
-        message: "Password updated successfully",
-      });
+      res
+        .status(200)
+        .json({ success: true, message: "Password updated successfully" });
     } catch (error) {
-      next(error); // ✅ IMPORTANT
+      res.status(500).json({ message: error.message });
     }
   },
 
