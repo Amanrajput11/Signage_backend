@@ -1,142 +1,133 @@
 const User = require("../models/user.model");
 const TvPairing = require("../models/TvPairing.model");
 const jwt = require("jsonwebtoken");
-const {
-  signAccessToken,
-  signRefreshToken,
-} = require("../Helpers/jwt_helper");
+const { signAccessToken, signRefreshToken } = require("../Helpers/jwt_helper");
 
 module.exports = {
-    create : async (req, res) => {
-  try {
-    const {
-      fullName,
-      address,
-      city,
-      mobile,
-      companyName,
-      email,
-    } = req.body;
+  create: async (req, res) => {
+    try {
+      const { fullName, address, city, mobile, companyName, email } = req.body;
 
-    const existingUser = await User.findOne({ mobile });
-    if (existingUser) {
-      return res.status(400).json({ message: "User already exists" });
+      const existingUser = await User.findOne({ mobile });
+      if (existingUser) {
+        return res.status(400).json({ message: "User already exists" });
+      }
+
+      const defaultPassword =
+        process.env.DEFAULT_USER_PASSWORD || "ChangeMe@123";
+
+      const user = new User({
+        fullName,
+        address,
+        city,
+        mobile,
+        companyName,
+        email,
+        password: defaultPassword,
+      });
+
+      await user.save();
+
+      res.status(201).json({
+        message: "User created successfully",
+        userId: user._id,
+        role: user.role,
+        isActive: user.isActive,
+      });
+    } catch (error) {
+      res.status(500).json({ message: error.message });
     }
+  },
 
-    const defaultPassword = process.env.DEFAULT_USER_PASSWORD || "ChangeMe@123";
+  login: async (req, res) => {
+    try {
+      const { email, password } = req.body;
 
-    const user = new User({
-      fullName,
-      address,
-      city,
-      mobile,
-      companyName,
-      email,
-      password: defaultPassword, 
-    });
+      if (!email || !password) {
+        return res
+          .status(400)
+          .json({ message: "Email and password are required" });
+      }
 
-    await user.save();
+      const user = await User.findOne({ email });
+      if (!user) {
+        return res.status(401).json({ message: "Invalid email or password" });
+      }
 
-    res.status(201).json({
-      message: "User created successfully",
-      userId: user._id,
-      role: user.role,
-      isActive: user.isActive,
-    });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-},
+      if (user.is_inactive) {
+        return res.status(403).json({
+          message: "Your account is inactive. Please contact admin.",
+        });
+      }
 
-login: async (req, res) => {
-  try {
-    const { email, password } = req.body;
+      const isMatch = await user.isValidPassword(password);
+      if (!isMatch) {
+        return res.status(401).json({ message: "Invalid email or password" });
+      }
 
-    if (!email || !password) {
-      return res
-        .status(400)
-        .json({ message: "Email and password are required" });
+      // ✅ USE JWT HELPER (IMPORTANT)
+      const accessToken = await signAccessToken(user._id);
+      const refreshToken = await signRefreshToken(user._id);
+
+      res.status(200).json({
+        message: "Login successful",
+        accessToken,
+        refreshToken,
+        user: {
+          id: user._id,
+          fullName: user.fullName,
+          email: user.email,
+          role: user.role,
+          is_inactive: user.is_inactive,
+        },
+      });
+    } catch (error) {
+      res.status(500).json({ message: error.message });
     }
+  },
 
-    const user = await User.findOne({ email });
-    if (!user) {
-      return res.status(401).json({ message: "Invalid email or password" });
-    }
+  // ================= GET ALL USERS =================
+  getAllUsers: async (req, res) => {
+    try {
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 10;
+      const search = req.query.search || "";
 
-    if (user.is_inactive) {
-      return res.status(403).json({
-        message: "Your account is inactive. Please contact admin.",
+      const skip = (page - 1) * limit;
+
+      // 🔍 Search filter
+      const filter = search
+        ? {
+            $or: [
+              { fullName: { $regex: search, $options: "i" } },
+              { email: { $regex: search, $options: "i" } },
+              { mobile: { $regex: search, $options: "i" } },
+            ],
+          }
+        : {};
+
+      const users = await User.find(filter)
+        .select("-password")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit);
+
+      const total = await User.countDocuments(filter);
+
+      res.status(200).json({
+        success: true,
+        page,
+        total,
+        totalPages: Math.ceil(total / limit),
+        data: users,
+      });
+    } catch (error) {
+      console.error("GET USERS ERROR 👉", error);
+      res.status(500).json({
+        message: "Failed to fetch users",
       });
     }
-
-    const isMatch = await user.isValidPassword(password);
-    if (!isMatch) {
-      return res.status(401).json({ message: "Invalid email or password" });
-    }
-
-    // ✅ USE JWT HELPER (IMPORTANT)
-    const accessToken = await signAccessToken(user._id);
-    const refreshToken = await signRefreshToken(user._id);
-
-    res.status(200).json({
-      message: "Login successful",
-      accessToken,
-      refreshToken,
-      user: {
-        id: user._id,
-        fullName: user.fullName,
-        email: user.email,
-        role: user.role,
-        is_inactive: user.is_inactive,
-      },
-    });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-},
-
-// ================= GET ALL USERS =================
-getAllUsers: async (req, res) => {
-  try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
-    const search = req.query.search || "";
-
-    const skip = (page - 1) * limit;
-
-    // 🔍 Search filter
-    const filter = search
-      ? {
-          $or: [
-            { fullName: { $regex: search, $options: "i" } },
-            { email: { $regex: search, $options: "i" } },
-            { mobile: { $regex: search, $options: "i" } },
-          ],
-        }
-      : {};
-
-    const users = await User.find(filter)
-      .select("-password")
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit);
-
-    const total = await User.countDocuments(filter);
-
-    res.status(200).json({
-      success: true,
-      page,
-      total,
-      totalPages: Math.ceil(total / limit),
-      data: users,
-    });
-  } catch (error) {
-    console.error("GET USERS ERROR 👉", error);
-    res.status(500).json({
-      message: "Failed to fetch users",
-    });
-  }
-},
+  },
 
   getProfile: async (req, res) => {
     try {
@@ -158,7 +149,7 @@ getAllUsers: async (req, res) => {
   },
 
   // ================= UPDATE PASSWORD =================
-  updatePassword: async (req, res) => {
+  updatePassword: async (req, res, next) => {
     try {
       const { oldPassword, newPassword } = req.body;
 
@@ -170,7 +161,6 @@ getAllUsers: async (req, res) => {
 
       const user = req.user;
 
-      // Check old password
       const isMatch = await user.isValidPassword(oldPassword);
       if (!isMatch) {
         return res.status(401).json({
@@ -178,7 +168,6 @@ getAllUsers: async (req, res) => {
         });
       }
 
-      // Update password (bcrypt runs automatically)
       user.password = newPassword;
       await user.save();
 
@@ -187,133 +176,131 @@ getAllUsers: async (req, res) => {
         message: "Password updated successfully",
       });
     } catch (error) {
+      next(error); // ✅ IMPORTANT
+    }
+  },
+
+  // ================= ACTIVATE / INACTIVATE USER =================
+  updateUserStatus: async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const { is_inactive } = req.body;
+
+      // Validation
+      if (typeof is_inactive !== "boolean") {
+        return res.status(400).json({
+          message: "is_inactive must be true or false",
+        });
+      }
+
+      const user = await User.findByIdAndUpdate(
+        userId,
+        { is_inactive },
+        { new: true }
+      ).select("-password");
+
+      if (!user) {
+        return res.status(404).json({
+          message: "User not found",
+        });
+      }
+
+      res.status(200).json({
+        success: true,
+        message: is_inactive
+          ? "User inactivated successfully"
+          : "User activated successfully",
+        data: user,
+      });
+    } catch (error) {
+      res.status(500).json({
+        message: error.message,
+      });
+    }
+  },
+
+  /* ================= TV: GENERATE CODE ================= */
+  generateTvCode: async (req, res) => {
+    try {
+      const { deviceId } = req.body;
+
+      if (!deviceId) {
+        return res.status(400).json({ message: "Device ID required" });
+      }
+
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
+
+      await TvPairing.create({
+        code,
+        deviceId,
+        expiresAt: new Date(Date.now() + 5 * 60 * 1000), // 5 min
+      });
+
+      res.status(200).json({
+        success: true,
+        code,
+        expiresIn: 300,
+      });
+    } catch (error) {
       res.status(500).json({ message: error.message });
     }
   },
 
+  /* ================= TV: PAIR DEVICE ================= */
+  pairTv: async (req, res) => {
+    try {
+      const { code } = req.body;
+      const userId = req.user._id;
 
-  // ================= ACTIVATE / INACTIVATE USER =================
-updateUserStatus: async (req, res) => {
-  try {
-    const { userId } = req.params;
-    const { is_inactive } = req.body;
-
-    // Validation
-    if (typeof is_inactive !== "boolean") {
-      return res.status(400).json({
-        message: "is_inactive must be true or false",
+      const pairing = await TvPairing.findOne({
+        code,
+        isUsed: false,
+        expiresAt: { $gt: new Date() },
       });
-    }
 
-    const user = await User.findByIdAndUpdate(
-      userId,
-      { is_inactive },
-      { new: true }
-    ).select("-password");
+      if (!pairing) {
+        return res.status(400).json({
+          message: "Invalid or expired TV code",
+        });
+      }
 
-    if (!user) {
-      return res.status(404).json({
-        message: "User not found",
+      pairing.isUsed = true;
+      pairing.userId = userId;
+      await pairing.save();
+
+      res.status(200).json({
+        success: true,
+        message: "TV paired successfully",
       });
+    } catch (error) {
+      res.status(500).json({ message: error.message });
     }
+  },
 
-    res.status(200).json({
-      success: true,
-      message: is_inactive
-        ? "User inactivated successfully"
-        : "User activated successfully",
-      data: user,
-    });
-  } catch (error) {
-    res.status(500).json({
-      message: error.message,
-    });
-  }
-},
+  /* ================= TV: CHECK STATUS ================= */
+  checkTvStatus: async (req, res) => {
+    try {
+      const { code } = req.params;
 
-/* ================= TV: GENERATE CODE ================= */
-generateTvCode: async (req, res) => {
-  try {
-    const { deviceId } = req.body;
+      const pairing = await TvPairing.findOne({ code });
 
-    if (!deviceId) {
-      return res.status(400).json({ message: "Device ID required" });
-    }
+      if (!pairing || !pairing.isUsed) {
+        return res.status(200).json({ paired: false });
+      }
 
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
+      const accessToken = await signAccessToken(pairing.userId);
+      const refreshToken = await signRefreshToken(pairing.userId);
 
-    await TvPairing.create({
-      code,
-      deviceId,
-      expiresAt: new Date(Date.now() + 5 * 60 * 1000), // 5 min
-    });
+      // Optional cleanup
+      await TvPairing.deleteOne({ _id: pairing._id });
 
-    res.status(200).json({
-      success: true,
-      code,
-      expiresIn: 300,
-    });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-},
-
-/* ================= TV: PAIR DEVICE ================= */
-pairTv: async (req, res) => {
-  try {
-    const { code } = req.body;
-    const userId = req.user._id;
-
-    const pairing = await TvPairing.findOne({
-      code,
-      isUsed: false,
-      expiresAt: { $gt: new Date() },
-    });
-
-    if (!pairing) {
-      return res.status(400).json({
-        message: "Invalid or expired TV code",
+      res.status(200).json({
+        paired: true,
+        accessToken,
+        refreshToken,
       });
+    } catch (error) {
+      res.status(500).json({ message: error.message });
     }
-
-    pairing.isUsed = true;
-    pairing.userId = userId;
-    await pairing.save();
-
-    res.status(200).json({
-      success: true,
-      message: "TV paired successfully",
-    });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-},
-
-/* ================= TV: CHECK STATUS ================= */
-checkTvStatus: async (req, res) => {
-  try {
-    const { code } = req.params;
-
-    const pairing = await TvPairing.findOne({ code });
-
-    if (!pairing || !pairing.isUsed) {
-      return res.status(200).json({ paired: false });
-    }
-
-    const accessToken = await signAccessToken(pairing.userId);
-    const refreshToken = await signRefreshToken(pairing.userId);
-
-    // Optional cleanup
-    await TvPairing.deleteOne({ _id: pairing._id });
-
-    res.status(200).json({
-      paired: true,
-      accessToken,
-      refreshToken,
-    });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-},
-
-}
+  },
+};
